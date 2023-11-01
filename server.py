@@ -6,7 +6,6 @@ from Crypto.PublicKey import ElGamal
 from Crypto import Random
 from Crypto.Util.Padding import pad, unpad
 
-
 def handle_client(client_socket, addr):
     print(f"Connection established with {addr}")
 
@@ -32,9 +31,11 @@ def handle_client(client_socket, addr):
     # Encrypt a welcome message
     iv = Random.new().read(16)
     cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-    encrypted_data = iv + cipher.encrypt(pad("Welcome to the secure chat!".encode(), 16))
+    padded_message = pad("Welcome to the secure chat!".encode(), 16)
+    encrypted_data = iv + cipher.encrypt(padded_message)
+    print("Padded message (hex):", padded_message.hex())
     print(f"Server encrypted data length: {len(encrypted_data)}")
-    print(f"Server encrypted data: {encrypted_data.hex()}")
+    print(f"Sending from server: {encrypted_data.hex()}")
     client_socket.send(encrypted_data)
 
     try:
@@ -58,11 +59,10 @@ def handle_client(client_socket, addr):
         print(f"Connection from {addr} closed.")
         client_socket.close()
 
-
 def start_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind(('0.0.0.0', 8081))
+    server_socket.bind(('0.0.0.0', 8082))
     server_socket.listen(5)
     print("Server started and waiting for connections...")
 
@@ -77,7 +77,6 @@ def start_server():
         print("\nShutting down the server...")
     finally:
         server_socket.close()
-
 
 if __name__ == "__main__":
     start_server()

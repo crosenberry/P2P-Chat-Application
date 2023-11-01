@@ -7,7 +7,7 @@ from Crypto.Util.Padding import pad, unpad
 
 def start_client():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(('127.0.0.1', 8081))
+    client_socket.connect(('127.0.0.1', 8082))
     print("Connected to server.")
 
     # Generate ElGamal keys for Diffie-Hellman
@@ -28,11 +28,15 @@ def start_client():
     aes_key = SHA256.new(str(shared_secret).encode()).digest()
     print(f"Client AES Key: {aes_key.hex()}")
 
-#   decrypt welcome message
+    # Receive and decrypt welcome message
     encrypted_response = client_socket.recv(1024)
+    print(f"Client received encrypted data length: {len(encrypted_response)}")
+    print(f"Client received: {encrypted_response.hex()}")
     iv = encrypted_response[:16]
     cipher = AES.new(aes_key, AES.MODE_CBC, iv)
     decrypted_data = cipher.decrypt(encrypted_response[16:])
+    print("Decrypted data length:", len(decrypted_data))
+    print("Decrypted data (hex):", decrypted_data.hex())
     decrypted_message = unpad(decrypted_data, AES.block_size).decode()
     print(f"Server says: {decrypted_message}")
 
@@ -47,8 +51,12 @@ def start_client():
 
             encrypted_response = client_socket.recv(1024)
             print(f"Client received encrypted data length: {len(encrypted_response)}")
-            cipher = AES.new(aes_key, AES.MODE_CBC, iv=encrypted_response[:16])
-            response = unpad(cipher.decrypt(encrypted_response[16:]), AES.block_size).decode()
+            iv_response = encrypted_response[:16]
+            cipher_response = AES.new(aes_key, AES.MODE_CBC, iv=iv_response)
+            decrypted_response = cipher_response.decrypt(encrypted_response[16:])
+            print("Decrypted data length:", len(decrypted_response))
+            print("Decrypted data (hex):", decrypted_response.hex())
+            response = unpad(decrypted_response, AES.block_size).decode()
             print(f"Server responded: {response}")
 
     except KeyboardInterrupt:
