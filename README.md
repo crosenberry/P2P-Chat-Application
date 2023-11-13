@@ -3,6 +3,11 @@
 ## Introduction
 In the modern digital era, as communication largely moves online, the significance of secure communication has soared. This project intends to craft a Peer-to-Peer (P2P) Chat Application that champions not only direct communication but also underpins security and user experience.
 
+### Usage
+ - First, install all requirements by running the command: pip install -r requirements.txt
+ - Next, run [server.py](server.py) so that connections can be established.
+ - Finally, run [client.py](client.py) for each device you wish to chat on.
+
 ## Objective
 * Design and develop a P2P chat application focusing on:
   * End-to-end encryption for message confidentiality.
