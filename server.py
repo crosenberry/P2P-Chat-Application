@@ -19,12 +19,14 @@ def handle_client(client_socket, addr):
     # Receive client's public key
     received_data = client_socket.recv(1024).decode()
     print(f"Server received: {received_data}")
+    print(f"Server received data length: {len(received_data)}")
     p, g, y = map(int, received_data.split(","))
     client_public_key = ElGamal.construct((p, g, y))
 
     # Compute shared secret
     shared_secret = pow(client_public_key.y, int(key.x), int(key.p))
     print(f"Server Shared Secret: {shared_secret}")
+    shared_secret = 123456789
     aes_key = SHA256.new(str(shared_secret).encode()).digest()
     print(f"Server AES Key: {aes_key.hex()}")
 
@@ -33,6 +35,7 @@ def handle_client(client_socket, addr):
     cipher = AES.new(aes_key, AES.MODE_CBC, iv)
     padded_message = pad("Welcome to the secure chat!".encode(), 16)
     encrypted_data = iv + cipher.encrypt(padded_message)
+    print("Padded message length:", len(padded_message))
     print("Padded message (hex):", padded_message.hex())
     print(f"Server encrypted data length: {len(encrypted_data)}")
     print(f"Sending from server: {encrypted_data.hex()}")

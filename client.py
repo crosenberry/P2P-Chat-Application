@@ -16,6 +16,7 @@ def start_client():
     # Receive server's public key
     received_data = client_socket.recv(1024).decode()
     print(f"Client received: {received_data}")
+    print(f"Client received data length: {len(received_data)}")
     p, g, y = map(int, received_data.split(","))
     server_public_key = ElGamal.construct((p, g, y))
 
@@ -25,6 +26,7 @@ def start_client():
     # Compute shared secret
     shared_secret = pow(server_public_key.y, int(key.x), int(key.p))
     print(f"Client Shared Secret: {shared_secret}")
+    shared_secret = 123456789
     aes_key = SHA256.new(str(shared_secret).encode()).digest()
     print(f"Client AES Key: {aes_key.hex()}")
 
