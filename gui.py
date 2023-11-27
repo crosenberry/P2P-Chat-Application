@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import scrolledtext
+from tkinter import ttk
 import threading
 
 class ChatGUI:
@@ -16,15 +17,25 @@ class ChatGUI:
         self.send_button = tk.Button(self.root, text="Send", command=self.send_msg)
         self.send_button.grid(row=1, column=1)
 
+        # Dropdown for selecting the target client
+        self.client_selector = ttk.Combobox(self.root, state='readonly')
+        self.client_selector.grid(row=2, column=0)
+
         self.send_function = None
 
     def set_send_function(self, send_function):
         self.send_function = send_function
 
+    def update_client_list(self, client_list):
+        """Update the dropdown with the list of connected clients."""
+        self.client_selector['values'] = client_list
+
     def send_msg(self):
+        target_client = self.client_selector.get()
         message = self.msg_entry.get()
-        if message and self.send_function:
-            self.send_function(message)
+        if message and target_client and self.send_function:
+            full_message = f"{target_client}:{message}"
+            self.send_function(full_message)
             self.msg_entry.delete(0, tk.END)
 
     def update_chat(self, message):
