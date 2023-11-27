@@ -8,7 +8,6 @@ from cryptography.hazmat.primitives.padding import PKCS7
 from cryptography.hazmat.primitives.asymmetric import ec
 
 
-
 class ClientHandler:
     def __init__(self):
         self.clients = {}
@@ -115,6 +114,7 @@ def start_server():
         print("\nShutting down the server...")
     finally:
         server_socket.close()
+
 
 if __name__ == "__main__":
     start_server()

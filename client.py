@@ -108,15 +108,19 @@ class ChatGUI:
     def receive_messages(self):
         while True:
             try:
-                # Assuming 'client_socket' is your socket object and 'aes_key' is your AES key
                 encrypted_response = client_socket.recv(1024)
                 if encrypted_response:
                     iv = encrypted_response[:16]
-                    cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-                    decrypted_response = unpad(cipher.decrypt(encrypted_response[16:]), AES.block_size).decode()
+                    cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
+                    decryptor = cipher.decryptor()
+                    unpadder = PKCS7(algorithms.AES.block_size).unpadder()
+
+                    decrypted_response = decryptor.update(encrypted_response[16:]) + decryptor.finalize()
+                    response = unpadder.update(decrypted_response) + unpadder.finalize()
+                    response = response.decode()
 
                     # Use Tkinter's thread-safe method to update the chat window
-                    self.chat_log.insert(tk.END, decrypted_response + '\n')
+                    self.update_chat(response)
             except Exception as e:
                 print(f"Error receiving message: {e}")
                 break
