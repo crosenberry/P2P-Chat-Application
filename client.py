@@ -60,11 +60,18 @@ def start_client(gui):
                     decryptor_response = cipher_response.decryptor()
                     unpadder_response = PKCS7(algorithms.AES.block_size).unpadder()
 
-                    decrypted_response = decryptor_response.update(encrypted_response[16:]) + decryptor_response.finalize()
+                    decrypted_response = decryptor_response.update(
+                        encrypted_response[16:]) + decryptor_response.finalize()
                     response = unpadder_response.update(decrypted_response) + unpadder_response.finalize()
                     response = response.decode()
-                    gui.update_chat(response)
-            except OSError:  # Possibly client has left the chat.
+
+                    if response.startswith("CLIENT_LIST:"):
+                        client_list = response[len("CLIENT_LIST:"):].split(',')
+                        gui.update_client_list(client_list)
+                        # Do not add client list updates to the chat log
+                    else:
+                        gui.update_chat(response)  # Only add regular chat messages to the chat log
+            except OSError:
                 break
 
     threading.Thread(target=receive_messages).start()

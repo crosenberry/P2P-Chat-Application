@@ -14,17 +14,44 @@ class ClientHandler:
         self.clients = {}
         self.client_count = 0
 
-    def add_client(self, client_socket, addr):
+    def broadcast_client_list(self):
+        """Sends the list of connected clients to all clients."""
+        client_list = ','.join(self.clients.keys())
+        for client_id, client_info in self.clients.items():
+            self.send_message_to_client(client_list, client_id, update=True)
+
+    def add_client(self, client_socket, addr, aes_key):
+        """Add a new client."""
         self.client_count += 1
-        client_id = f"Client_{self.client_count}"  # Unique identifier for each client
-        self.clients[client_id] = (client_socket, addr)
+        client_id = f"Client_{self.client_count}"
+        self.clients[client_id] = {'socket': client_socket, 'addr': addr, 'aes_key': aes_key}
+        self.broadcast_client_list()
         return client_id
 
+    def send_message_to_client(self, message, client_id, update=False):
+        """Send a message to a specific client."""
+        client = self.clients.get(client_id)
+        if not client:
+            return  # Client not found
+
+        aes_key = client['aes_key']
+        client_socket = client['socket']
+        iv = os.urandom(16)
+        cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
+        padder = PKCS7(algorithms.AES.block_size).padder()
+        padded_message = padder.update(message.encode()) + padder.finalize()
+        encrypted_message = iv + encryptor.update(padded_message) + encryptor.finalize()
+        client_socket.send(encrypted_message)
+
     def remove_client(self, client_id):
+        """Remove a client."""
         if client_id in self.clients:
             del self.clients[client_id]
+            self.broadcast_client_list()
 
     def handle_client(self, client_socket, addr):
+        """Handle the client connection."""
         print(f"Connection established with {addr}")
 
         # Generate ECDH keys for Diffie-Hellman
@@ -45,26 +72,20 @@ class ClientHandler:
             backend=default_backend()
         )
 
-        # Compute shared secret
+        # Compute shared secret and generate AES key
         shared_secret = server_private_key.exchange(ec.ECDH(), client_public_key)
         digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
         digest.update(shared_secret)
         aes_key = digest.finalize()
 
-        # Encrypt a welcome message
-        iv = os.urandom(16)
-        cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
-        encryptor = cipher.encryptor()
-        padder = PKCS7(algorithms.AES.block_size).padder()
-        padded_message = padder.update("Welcome to the secure chat!".encode()) + padder.finalize()
-        encrypted_data = iv + encryptor.update(padded_message) + encryptor.finalize()
-        client_socket.send(encrypted_data)
+        # Encrypt a welcome message and send it
+        self.send_message_to_client("Welcome to the secure chat!", client_socket)
 
-        client_id = self.add_client(client_socket, addr)
+        client_id = self.add_client(client_socket, addr, aes_key)
 
         try:
             while True:
-                iv = os.urandom(16)  # Generate new IV for every message
+                iv = os.urandom(16)
                 encrypted_data = client_socket.recv(1024)
                 if not encrypted_data:
                     break
