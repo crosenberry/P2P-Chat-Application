@@ -1,10 +1,13 @@
+import os
 import socket
 import threading
-from Crypto.Cipher import AES
-from Crypto.Hash import SHA256
-from Crypto.PublicKey import ElGamal
-from Crypto import Random
-from Crypto.Util.Padding import pad, unpad
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.padding import PKCS7
+from cryptography.hazmat.primitives.asymmetric import ec
+
+
 
 class ClientHandler:
     def __init__(self):
@@ -24,45 +27,66 @@ class ClientHandler:
     def handle_client(self, client_socket, addr):
         print(f"Connection established with {addr}")
 
-        # Generate ElGamal keys for Diffie-Hellman
-        key = ElGamal.generate(256, Random.new().read)
-        public_key = key.publickey()
+        # Generate ECDH keys for Diffie-Hellman
+        server_private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+        server_public_key = server_private_key.public_key()
 
         # Send server's public key to client
-        client_socket.send(f"{public_key.p},{public_key.g},{public_key.y}".encode())
+        public_key_bytes = server_public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        client_socket.send(public_key_bytes)
 
         # Receive client's public key
-        received_data = client_socket.recv(1024).decode()
-        p, g, y = map(int, received_data.split(","))
-        client_public_key = ElGamal.construct((p, g, y))
+        client_public_key_bytes = client_socket.recv(1024)
+        client_public_key = serialization.load_pem_public_key(
+            client_public_key_bytes,
+            backend=default_backend()
+        )
 
         # Compute shared secret
-        shared_secret = pow(client_public_key.y, int(key.x), int(key.p))
-        shared_secret = 123456789
-        aes_key = SHA256.new(str(shared_secret).encode()).digest()
+        shared_secret = server_private_key.exchange(ec.ECDH(), client_public_key)
+        digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+        digest.update(shared_secret)
+        aes_key = digest.finalize()
 
         # Encrypt a welcome message
-        iv = Random.new().read(16)
-        cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-        padded_message = pad("Welcome to the secure chat!".encode(), 16)
-        encrypted_data = iv + cipher.encrypt(padded_message)
+        iv = os.urandom(16)
+        cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
+        padder = PKCS7(algorithms.AES.block_size).padder()
+        padded_message = padder.update("Welcome to the secure chat!".encode()) + padder.finalize()
+        encrypted_data = iv + encryptor.update(padded_message) + encryptor.finalize()
         client_socket.send(encrypted_data)
 
         client_id = self.add_client(client_socket, addr)
 
         try:
             while True:
-                iv = Random.new().read(16)  # Generate new IV for every message
+                iv = os.urandom(16)  # Generate new IV for every message
                 encrypted_data = client_socket.recv(1024)
+                if not encrypted_data:
+                    break
+
                 iv_received = encrypted_data[:16]
-                cipher = AES.new(aes_key, AES.MODE_CBC, iv=iv_received)
-                decrypted_data = unpad(cipher.decrypt(encrypted_data[16:]), AES.block_size).decode()
+                cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv_received), backend=default_backend())
+                decryptor = cipher.decryptor()
+                unpadder = PKCS7(algorithms.AES.block_size).unpadder()
+
+                decrypted_data = decryptor.update(encrypted_data[16:]) + decryptor.finalize()
+                decrypted_data = unpadder.update(decrypted_data) + unpadder.finalize()
+                decrypted_data = decrypted_data.decode()
 
                 print(f"Received from {addr}: {decrypted_data}")
                 response = f"{client_id}: {decrypted_data}"
-                cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-                ct_bytes = cipher.encrypt(pad(response.encode(), AES.block_size))
-                encrypted_response = iv + ct_bytes
+
+                cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
+                encryptor = cipher.encryptor()
+                padder = PKCS7(algorithms.AES.block_size).padder()
+                padded_response = padder.update(response.encode()) + padder.finalize()
+                encrypted_response = iv + encryptor.update(padded_response) + encryptor.finalize()
+
                 client_socket.send(encrypted_response)
 
         except Exception as e:
@@ -71,6 +95,7 @@ class ClientHandler:
             print(f"Connection from {addr} closed.")
             self.remove_client(client_id)
             client_socket.close()
+
 
 def start_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -1,54 +1,69 @@
 import socket
 import threading
-from Crypto.Cipher import AES
-from Crypto.Hash import SHA256
-from Crypto.PublicKey import ElGamal
-from Crypto import Random
-from Crypto.Util.Padding import pad, unpad
 import tkinter as tk
 from tkinter import scrolledtext
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.padding import PKCS7
+from cryptography.hazmat.backends import default_backend
+import os
 
 def start_client(gui):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect(('127.0.0.1', 8082))
     print("Connected to server.")
 
-    # Generate ElGamal keys for Diffie-Hellman
-    key = ElGamal.generate(256, Random.new().read)
+    # Generate ECDH keys for Diffie-Hellman
+    client_private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+    client_public_key = client_private_key.public_key()
 
     # Send client's public key to server
-    client_socket.send(f"{key.p},{key.g},{key.y}".encode())
+    public_key_bytes = client_public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    client_socket.send(public_key_bytes)
 
     # Receive server's public key
-    received_data = client_socket.recv(1024).decode()
-    print(f"Client received: {received_data}")
-    p, g, y = map(int, received_data.split(","))
-    server_public_key = ElGamal.construct((p, g, y))
+    server_public_key_bytes = client_socket.recv(1024)
+    server_public_key = serialization.load_pem_public_key(
+        server_public_key_bytes,
+        backend=default_backend()
+    )
 
     # Compute shared secret
-    shared_secret = pow(server_public_key.y, int(key.x), int(key.p))
-    print(f"Client Shared Secret: {shared_secret}")
-    shared_secret = 123456789
-    aes_key = SHA256.new(str(shared_secret).encode()).digest()
-    print(f"Client AES Key: {aes_key.hex()}")
+    shared_secret = client_private_key.exchange(ec.ECDH(), server_public_key)
+    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+    digest.update(shared_secret)
+    aes_key = digest.finalize()
 
     # Receive and decrypt welcome message
     encrypted_response = client_socket.recv(1024)
     iv = encrypted_response[:16]
-    cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-    decrypted_data = cipher.decrypt(encrypted_response[16:])
-    decrypted_message = unpad(decrypted_data, AES.block_size).decode()
+    cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    unpadder = PKCS7(algorithms.AES.block_size).unpadder()
+
+    decrypted_data = decryptor.update(encrypted_response[16:]) + decryptor.finalize()
+    decrypted_data = unpadder.update(decrypted_data) + unpadder.finalize()
+    decrypted_message = decrypted_data.decode()
     print(f"Server says: {decrypted_message}")
     gui.update_chat(f"Server says: {decrypted_message}")
+
     def receive_messages():
         while True:
             try:
                 encrypted_response = client_socket.recv(1024)
                 if encrypted_response:
                     iv_response = encrypted_response[:16]
-                    cipher_response = AES.new(aes_key, AES.MODE_CBC, iv=iv_response)
-                    decrypted_response = cipher_response.decrypt(encrypted_response[16:])
-                    response = unpad(decrypted_response, AES.block_size).decode()
+                    cipher_response = Cipher(algorithms.AES(aes_key), modes.CBC(iv_response), backend=default_backend())
+                    decryptor_response = cipher_response.decryptor()
+                    unpadder_response = PKCS7(algorithms.AES.block_size).unpadder()
+
+                    decrypted_response = decryptor_response.update(encrypted_response[16:]) + decryptor_response.finalize()
+                    response = unpadder_response.update(decrypted_response) + unpadder_response.finalize()
+                    response = response.decode()
                     gui.update_chat(response)
             except OSError:  # Possibly client has left the chat.
                 break
@@ -56,10 +71,12 @@ def start_client(gui):
     threading.Thread(target=receive_messages).start()
 
     def send_message(message):
-        iv = Random.new().read(16)
-        cipher = AES.new(aes_key, AES.MODE_CBC, iv)
-        ct_bytes = cipher.encrypt(pad(message.encode(), AES.block_size))
-        encrypted_message = iv + ct_bytes
+        iv = os.urandom(16)
+        cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
+        padder = PKCS7(algorithms.AES.block_size).padder()
+        padded_message = padder.update(message.encode()) + padder.finalize()
+        encrypted_message = iv + encryptor.update(padded_message) + encryptor.finalize()
         client_socket.send(encrypted_message)
 
     def on_closing():
