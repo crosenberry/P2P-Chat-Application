@@ -64,9 +64,11 @@ def start_client(gui):
                         encrypted_response[16:]) + decryptor_response.finalize()
                     response = unpadder_response.update(decrypted_response) + unpadder_response.finalize()
                     response = response.decode()
+                    print(f"Received message: {response}")  # Debug print
 
                     if response.startswith("CLIENT_LIST:"):
                         client_list = response[len("CLIENT_LIST:"):].split(',')
+                        print(f"Updating client list: {client_list}")  # Debug print
                         gui.update_client_list(client_list)
                         # Do not add client list updates to the chat log
                     else:

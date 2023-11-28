@@ -26,15 +26,22 @@ class ChatGUI:
     def set_send_function(self, send_function):
         self.send_function = send_function
 
+    def _set_dropdown_values(self, client_list):
+        """Sets the values for the client selector dropdown."""
+        self.client_selector['values'] = ["Broadcast to Everyone"] + client_list
+
     def update_client_list(self, client_list):
-        """Update the dropdown with the list of connected clients."""
-        self.client_selector['values'] = client_list
+        """Update the dropdown with the list of connected clients, including a broadcast option."""
+        self.root.after(0, lambda: self._set_dropdown_values(client_list))
 
     def send_msg(self):
         target_client = self.client_selector.get()
         message = self.msg_entry.get()
-        if message and target_client and self.send_function:
-            full_message = f"{target_client}:{message}"
+        if message and self.send_function:
+            if target_client == "Broadcast to Everyone":
+                full_message = f"Broadcast:{message}"
+            else:
+                full_message = f"{target_client}:{message}"
             self.send_function(full_message)
             self.msg_entry.delete(0, tk.END)
 

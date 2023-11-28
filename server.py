@@ -8,7 +8,6 @@ from cryptography.hazmat.primitives.padding import PKCS7
 from cryptography.hazmat.primitives.asymmetric import ec
 
 
-
 class ClientHandler:
     def __init__(self):
         self.clients = {}
@@ -49,6 +48,11 @@ class ClientHandler:
         if client_id in self.clients:
             del self.clients[client_id]
             self.broadcast_client_list()
+
+    def broadcast_message(self, message):
+        """Broadcast a message to all clients."""
+        for client_id, client_info in self.clients.items():
+            self.send_message_to_client(message, client_id)
 
     def handle_client(self, client_socket, addr):
         """Handle the client connection."""
@@ -99,16 +103,22 @@ class ClientHandler:
                 decrypted_data = unpadder.update(decrypted_data) + unpadder.finalize()
                 decrypted_data = decrypted_data.decode()
 
+                # Remove leading colon if present
+                if decrypted_data.startswith(":"):
+                    decrypted_data = decrypted_data[1:]
+
                 print(f"Received from {addr}: {decrypted_data}")
-                response = f"{client_id}: {decrypted_data}"
 
-                cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
-                encryptor = cipher.encryptor()
-                padder = PKCS7(algorithms.AES.block_size).padder()
-                padded_response = padder.update(response.encode()) + padder.finalize()
-                encrypted_response = iv + encryptor.update(padded_response) + encryptor.finalize()
-
-                client_socket.send(encrypted_response)
+                # Check if the message is a broadcast message
+                if decrypted_data.startswith("Broadcast:"):
+                    broadcast_msg = decrypted_data[len("Broadcast:"):]
+                    self.broadcast_message(f"{client_id}: {broadcast_msg}")
+                elif ':' in decrypted_data:
+                    target_client_id, target_msg = decrypted_data.split(':', 1)
+                    if target_client_id in self.clients:
+                        self.send_message_to_client(f"{client_id}: {target_msg}", target_client_id)
+                    else:
+                        print(f"Target client {target_client_id} not found")
 
         except Exception as e:
             print(f"Error with connection from {addr}: {e}")
@@ -116,7 +126,6 @@ class ClientHandler:
             print(f"Connection from {addr} closed.")
             self.remove_client(client_id)
             client_socket.close()
-
 
 def start_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -136,6 +145,7 @@ def start_server():
         print("\nShutting down the server...")
     finally:
         server_socket.close()
+
 
 if __name__ == "__main__":
     start_server()
