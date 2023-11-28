@@ -7,45 +7,54 @@ class ChatGUI:
         self.root = ctk.CTk()  # Use CTk window
         self.root.title("P2P Chat Client")
 
-        ctk.set_appearance_mode("Dark")  # Set theme to Dark
+        # Set theme to Dark
+        ctk.set_appearance_mode("Dark")
 
-        # Configure the chat log with a dark background and light text
+        # Set the window size and make it not resizable for consistent styling
+        self.root.geometry("800x600")
+        self.root.resizable(False, False)
+
+        # Initial placeholder for the username
+        self.client_name = "Client_1"
+
+        # Change Username Button with consistent CustomTkinter styling
+        self.change_username_button = ctk.CTkButton(self.root, text="Change Username", command=self.change_username,
+                                                    corner_radius=10)
+        self.change_username_button.grid(row=0, column=0, padx=20, pady=10, sticky="w")
+
+        # Username Label with CustomTkinter styling
+        self.username_label = ctk.CTkLabel(self.root, text=f"Username: {self.client_name}", corner_radius=10)
+        self.username_label.grid(row=0, column=1, padx=20, pady=10, sticky="w")
+
+        # Chat Log with dark background and scrollbar
         self.chat_log = scrolledtext.ScrolledText(self.root, bg="#2e2e2e", fg="#eaeaea", insertbackground="white",
-                                                  state='disabled')
-        self.chat_log.grid(row=1, column=0, columnspan=3, sticky="nsew", padx=5, pady=5)
+                                                  state='disabled', borderwidth=0, highlightthickness=0)
+        self.chat_log.grid(row=1, column=0, columnspan=2, padx=20, pady=10, sticky="nsew")
 
-        self.msg_entry = ctk.CTkEntry(self.root)  # Use CTkEntry
-        self.msg_entry.grid(row=2, column=0, sticky="ew", padx=5)
+        # Message Entry with CustomTkinter styling
+        self.msg_entry = ctk.CTkEntry(self.root, corner_radius=10)
+        self.msg_entry.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
 
-        self.send_button = ctk.CTkButton(self.root, text="Send", command=self.send_msg)  # Use CTkButton
-        self.send_button.grid(row=2, column=1, padx=5)
-
-        self.change_username_button = ctk.CTkButton(self.root, text="Change Username",
-                                                    command=self.change_username)  # Use CTkButton
-        self.change_username_button.grid(row=0, column=0, padx=5, pady=5)
+        # Send Button with CustomTkinter styling
+        self.send_button = ctk.CTkButton(self.root, text="Send", command=self.send_msg, corner_radius=10)
+        self.send_button.grid(row=2, column=1, padx=20, pady=10)
 
         self.send_function = None
 
-        # This is necessary for the chat log to expand and fill the space as the window resizes
+        # Grid configuration for resizing behavior
         self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
     def set_send_function(self, send_function):
         self.send_function = send_function
 
-    def _set_dropdown_values(self, client_list):
-        self.client_selector['values'] = ["Broadcast to Everyone"] + client_list
-
-    def update_client_list(self, client_list):
-        self.root.after(0, lambda: self._set_dropdown_values(client_list))
-
     def change_username(self):
         new_username = simpledialog.askstring("Change Username", "Enter new username:", parent=self.root)
         if new_username:
             self.client_name = new_username
+            self.username_label.configure(text=f"Username: {new_username}")
             change_message = f"USERNAME_CHANGE:{new_username}"
             self.send_function(change_message)
-            print(f"Username changed to: {new_username}")
 
     def send_msg(self):
         message = self.msg_entry.get()
