@@ -6,12 +6,14 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.padding import PKCS7
 from cryptography.hazmat.primitives.asymmetric import ec
+from threading import Lock
 
 
 class ClientHandler:
     def __init__(self):
         self.clients = {}
         self.client_count = 0
+        self.lock = Lock()  # Initialize the lock
 
     def broadcast_client_list(self):
         """Sends the list of connected clients to all clients."""
@@ -20,12 +22,12 @@ class ClientHandler:
             self.send_message_to_client(client_list, client_id, update=True)
 
     def add_client(self, client_socket, addr, aes_key):
-        """Add a new client."""
-        self.client_count += 1
-        client_id = f"Client_{self.client_count}"
-        self.clients[client_id] = {'socket': client_socket, 'addr': addr, 'aes_key': aes_key}
-        self.broadcast_client_list()
-        return client_id
+        with self.lock:
+            self.client_count += 1
+            client_id = f"Client_{self.client_count}"
+            self.clients[client_id] = {'socket': client_socket, 'addr': addr, 'aes_key': aes_key}
+            self.broadcast_client_list()
+            return client_id
 
     def send_message_to_client(self, message, client_id, update=False):
         """Send a message to a specific client."""
@@ -44,10 +46,10 @@ class ClientHandler:
         client_socket.send(encrypted_message)
 
     def remove_client(self, client_id):
-        """Remove a client."""
-        if client_id in self.clients:
-            del self.clients[client_id]
-            self.broadcast_client_list()
+        with self.lock:
+            if client_id in self.clients:
+                del self.clients[client_id]
+                self.broadcast_client_list()
 
     def broadcast_message(self, message):
         """Broadcast a message to all clients."""
