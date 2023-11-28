@@ -3,6 +3,12 @@
 ## Introduction
 In the modern digital era, as communication largely moves online, the significance of secure communication has soared. This project intends to craft a Peer-to-Peer (P2P) Chat Application that champions not only direct communication but also underpins security and user experience.
 
+### Run Configurations
+ * To run multiple clients in parallel, run configurations must be set.
+ * Navigate to 'Run' → 'Edit Configurations'
+ * Click the '+' button.
+ * In the Client.py configuration, click the "Allow Multiple Instances" button.
+
 ### Usage
  - First, install all requirements by running the command: pip install -r requirements.txt
  - Next, run [server.py](server.py) so that connections can be established.
