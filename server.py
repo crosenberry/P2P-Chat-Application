@@ -21,6 +21,17 @@ class ClientHandler:
         for client_id, client_info in self.clients.items():
             self.send_message_to_client(client_list, client_id, update=True)
 
+    def handle_username_change(self, old_client_id, new_username):
+        with self.lock:
+            if new_username in self.clients:
+                # If username is taken, inform the client
+                self.send_message_to_client("Username change rejected. Name already in use.", old_client_id)
+            else:
+                # Update the client's identifier
+                client_info = self.clients.pop(old_client_id)
+                self.clients[new_username] = client_info
+                self.broadcast_message(f"USERNAME_UPDATE:{old_client_id}:{new_username}")
+
     def add_client(self, client_socket, addr, aes_key):
         with self.lock:
             self.client_count += 1
@@ -110,6 +121,12 @@ class ClientHandler:
                     decrypted_data = decrypted_data[1:]
 
                 print(f"Received from {addr}: {decrypted_data}")
+
+                # If the message is a username change request
+                if decrypted_data.startswith("USERNAME_CHANGE:"):
+                    _, new_username = decrypted_data.split(':', 1)
+                    self.handle_username_change(client_id, new_username)
+                    client_id = new_username  # Update the client_id with the new username
 
                 # Check if the message is a broadcast message
                 if decrypted_data.startswith("Broadcast:"):

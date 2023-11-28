@@ -8,94 +8,97 @@ from cryptography.hazmat.backends import default_backend
 import os
 from gui import ChatGUI
 
-def start_client(gui):
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(('127.0.0.1', 8082))
-    print("Connected to server.")
+class Client:
+    def __init__(self, gui):
+        self.gui = gui
+        self.gui.set_send_function(self.send_message)
+        self.client_socket = None
+        self.aes_key = None
+        self.client_name = None
 
-    # Generate ECDH keys for Diffie-Hellman
-    client_private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
-    client_public_key = client_private_key.public_key()
+    def start_client(self):
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client_socket.connect(('127.0.0.1', 8082))
+        print("Connected to server.")
 
-    # Send client's public key to server
-    public_key_bytes = client_public_key.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    )
-    client_socket.send(public_key_bytes)
+        # Generate ECDH keys for Diffie-Hellman
+        client_private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+        client_public_key = client_private_key.public_key()
 
-    # Receive server's public key
-    server_public_key_bytes = client_socket.recv(1024)
-    server_public_key = serialization.load_pem_public_key(
-        server_public_key_bytes,
-        backend=default_backend()
-    )
+        # Send client's public key to server
+        public_key_bytes = client_public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        self.client_socket.send(public_key_bytes)
 
-    # Compute shared secret
-    shared_secret = client_private_key.exchange(ec.ECDH(), server_public_key)
-    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-    digest.update(shared_secret)
-    aes_key = digest.finalize()
+        # Receive server's public key
+        server_public_key_bytes = self.client_socket.recv(1024)
+        server_public_key = serialization.load_pem_public_key(
+            server_public_key_bytes,
+            backend=default_backend()
+        )
 
-    # Receive and decrypt welcome message
-    encrypted_response = client_socket.recv(1024)
-    iv = encrypted_response[:16]
-    cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
-    decryptor = cipher.decryptor()
-    unpadder = PKCS7(algorithms.AES.block_size).unpadder()
+        # Compute shared secret
+        shared_secret = client_private_key.exchange(ec.ECDH(), server_public_key)
+        digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+        digest.update(shared_secret)
+        self.aes_key = digest.finalize()
 
-    decrypted_data = decryptor.update(encrypted_response[16:]) + decryptor.finalize()
-    decrypted_data = unpadder.update(decrypted_data) + unpadder.finalize()
-    decrypted_message = decrypted_data.decode()
-    print(f"Server says: {decrypted_message}")
-    gui.update_chat(f"Server says: {decrypted_message}")
+        # Receive and decrypt welcome message
+        self.receive_and_decrypt()
 
-    def receive_messages():
+    def receive_messages(self):
         while True:
-            try:
-                encrypted_response = client_socket.recv(1024)
-                if encrypted_response:
-                    iv_response = encrypted_response[:16]
-                    cipher_response = Cipher(algorithms.AES(aes_key), modes.CBC(iv_response), backend=default_backend())
-                    decryptor_response = cipher_response.decryptor()
-                    unpadder_response = PKCS7(algorithms.AES.block_size).unpadder()
+            message = self.receive_and_decrypt()
+            if message:
+                print(f"Received message: {message}")  # Debug print
+                if message.startswith("USERNAME_UPDATE:"):
+                    old_name, new_name = message.split(':')[1:]
+                    print(f"Username updated from {old_name} to {new_name}")
+                    # Update client's own username if necessary
+                    if old_name == self.client_name:
+                        self.client_name = new_name
+                else:
+                    self.gui.update_chat(message)  # Update GUI with received message
 
-                    decrypted_response = decryptor_response.update(
-                        encrypted_response[16:]) + decryptor_response.finalize()
-                    response = unpadder_response.update(decrypted_response) + unpadder_response.finalize()
-                    response = response.decode()
-                    print(f"Received message: {response}")  # Debug print
+    def receive_and_decrypt(self):
+        try:
+            encrypted_response = self.client_socket.recv(1024)
+            if encrypted_response:
+                iv_response = encrypted_response[:16]
+                cipher_response = Cipher(algorithms.AES(self.aes_key), modes.CBC(iv_response), backend=default_backend())
+                decryptor_response = cipher_response.decryptor()
+                unpadder_response = PKCS7(algorithms.AES.block_size).unpadder()
 
-                    if response.startswith("CLIENT_LIST:"):
-                        client_list = response[len("CLIENT_LIST:"):].split(',')
-                        print(f"Updating client list: {client_list}")  # Debug print
-                        gui.update_client_list(client_list)
-                        # Do not add client list updates to the chat log
-                    else:
-                        gui.update_chat(response)  # Only add regular chat messages to the chat log
-            except OSError:
-                break
+                decrypted_response = decryptor_response.update(
+                    encrypted_response[16:]) + decryptor_response.finalize()
+                response = unpadder_response.update(decrypted_response) + unpadder_response.finalize()
+                return response.decode()
+        except OSError:
+            return None
 
-    threading.Thread(target=receive_messages).start()
-
-    def send_message(message):
+    def send_message(self, message):
         iv = os.urandom(16)
-        cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
+        cipher = Cipher(algorithms.AES(self.aes_key), modes.CBC(iv), backend=default_backend())
         encryptor = cipher.encryptor()
         padder = PKCS7(algorithms.AES.block_size).padder()
         padded_message = padder.update(message.encode()) + padder.finalize()
         encrypted_message = iv + encryptor.update(padded_message) + encryptor.finalize()
-        client_socket.send(encrypted_message)
+        self.client_socket.send(encrypted_message)
 
-    def on_closing():
-        client_socket.close()
-        gui.root.destroy()
+    def change_username(self, new_username):
+        self.send_message(f"USERNAME_CHANGE:{new_username}")
+        self.client_name = new_username  # Optimistically set the new username
 
-    gui.set_send_function(send_message)
-    gui.root.protocol("WM_DELETE_WINDOW", on_closing)
-
+    def on_closing(self):
+        self.client_socket.close()
+        self.gui.root.destroy()
 
 if __name__ == "__main__":
     gui = ChatGUI()
-    start_client(gui)
+    client = Client(gui)
+    client.start_client()
+    threading.Thread(target=client.receive_messages, daemon=True).start()
+    gui.root.protocol("WM_DELETE_WINDOW", client.on_closing)
     gui.root.mainloop()
