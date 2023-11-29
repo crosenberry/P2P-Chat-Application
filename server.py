@@ -49,6 +49,9 @@ class ClientHandler:
         aes_key = client['aes_key']
         client_socket = client['socket']
         iv = os.urandom(16)
+        print(f"aes_key type: {type(aes_key)}")
+        print(f"iv type: {type(iv)}")
+        print(f"message type: {type(message)}")
         cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
         encryptor = cipher.encryptor()
         padder = PKCS7(algorithms.AES.block_size).padder()
@@ -126,15 +129,15 @@ class ClientHandler:
                 if decrypted_data.startswith("USERNAME_CHANGE:"):
                     _, new_username = decrypted_data.split(':', 1)
                     self.handle_username_change(client_id, new_username)
+                    # After a successful username change, the client_id variable should be updated
                     client_id = new_username  # Update the client_id with the new username
-
-                # Check if the message is a broadcast message
-                if decrypted_data.startswith("Broadcast:"):
-                    broadcast_msg = decrypted_data[len("Broadcast:"):]
-                    self.broadcast_message(f"{client_id}: {broadcast_msg}")
                 elif ':' in decrypted_data:
                     target_client_id, target_msg = decrypted_data.split(':', 1)
-                    if target_client_id in self.clients:
+                    # Check if the message is for a specific client or a broadcast
+                    if target_client_id == "Broadcast":
+                        self.broadcast_message(f"{client_id}: {target_msg}")
+                    elif target_client_id in self.clients:
+                        # Send the message to the specific client
                         self.send_message_to_client(f"{client_id}: {target_msg}", target_client_id)
                     else:
                         print(f"Target client {target_client_id} not found")
