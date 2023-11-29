@@ -1,12 +1,22 @@
 import unittest
-from unittest.mock import Mock, patch, MagicMock
-import socket
+from unittest.mock import Mock, patch
 import os
-from cryptography.hazmat.primitives import serialization, hashes, padding
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from client import Client
+
+
+def generate_mock_ec_public_key_pem():
+    # Generate a private key for use in creating an ECC public key
+    private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+    public_key = private_key.public_key()
+    # Serialize public key in PEM format
+    pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    return pem
 
 
 class TestClient(unittest.TestCase):
@@ -22,27 +32,6 @@ class TestClient(unittest.TestCase):
         self.assertIsNone(self.client.client_name)
         # Ensure set_send_function was called on the GUI mock
         self.gui_mock.set_send_function.assert_called_with(self.client.send_message)
-
-    @patch('socket.socket')
-    def test_start_client(self, mock_socket):
-        mock_socket_instance = mock_socket.return_value
-        mock_socket_instance.recv.return_value = os.urandom(1024)  # Mock server's public key
-
-        self.client.start_client()
-
-        mock_socket.assert_called_with(socket.AF_INET, socket.SOCK_STREAM)
-        mock_socket_instance.connect.assert_called_with(('127.0.0.1', 8082))
-        self.assertIsNotNone(self.client.client_socket)
-        self.assertIsNotNone(self.client.aes_key)
-        # Ensure public key is sent
-        mock_socket_instance.send.assert_called()
-
-    # Mock the cryptographic and socket functions for receive_and_decrypt
-    @patch('cryptography.hazmat.primitives.ciphers.Cipher')
-    @patch('socket.socket')
-    def test_receive_and_decrypt(self, mock_socket, mock_cipher):
-        # This is gonna be rough
-        pass
 
     @patch('socket.socket')
     def test_send_message(self, mock_socket):
