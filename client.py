@@ -8,6 +8,7 @@ from cryptography.hazmat.backends import default_backend
 import os
 from gui import ChatGUI
 
+
 class Client:
     def __init__(self, gui):
         self.gui = gui

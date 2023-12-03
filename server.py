@@ -11,8 +11,8 @@ from threading import Lock
 
 class ClientHandler:
     def __init__(self):
-        self.clients = {}
-        self.client_count = 0
+        self.clients = {}  # Dictionary to store client information
+        self.client_count = 0  # Counter for the number of clients
         self.lock = Lock()  # Initialize the lock
 
     def broadcast_client_list(self):
@@ -22,6 +22,7 @@ class ClientHandler:
             self.send_message_to_client(client_list, client_id, update=True)
 
     def handle_username_change(self, old_client_id, new_username):
+        """Allows a user to change their display name."""
         with self.lock:
             if new_username in self.clients:
                 # If username is taken, inform the client
@@ -33,6 +34,7 @@ class ClientHandler:
                 self.broadcast_message(f"USERNAME_UPDATE:{old_client_id}:{new_username}")
 
     def add_client(self, client_socket, addr, aes_key):
+        """Adds a new client to the server."""
         with self.lock:
             self.client_count += 1
             client_id = f"Client_{self.client_count}"
@@ -49,9 +51,8 @@ class ClientHandler:
         aes_key = client['aes_key']
         client_socket = client['socket']
         iv = os.urandom(16)
-        print(f"aes_key type: {type(aes_key)}")
-        print(f"iv type: {type(iv)}")
-        print(f"message type: {type(message)}")
+        print(f"aes_key:", aes_key)
+        print(f"iv:", iv)
         cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
         encryptor = cipher.encryptor()
         padder = PKCS7(algorithms.AES.block_size).padder()

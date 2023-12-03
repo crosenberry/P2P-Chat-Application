@@ -63,7 +63,6 @@ In the modern digital era, as communication largely moves online, the significan
 
 **Week 4:**
 * Perfect the GUI and merge with chat features.
-* Start building the file transfer feature.
 
 **Week 5:**
 * Round off the file transfer capabilities.
